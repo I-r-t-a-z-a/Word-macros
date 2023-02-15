@@ -1,64 +1,93 @@
 Attribute VB_Name = "Reformat"
+'**************************************************************************
+' Runs all reformat macros
+'**************************************************************************
 Sub reformatEverything()
-    reformatTables
     reformatBulletedLists
-    reformatNumberedLists
-    removeFigWording
+    reformatTables
+    'reformatNumberedLists 'DEPRECATED
     reformatImages
     
 End Sub
-
+'**************************************************************************
+' Selects each table individually removes indent and bolds first row
+'**************************************************************************
 Sub reformatTables()
-'Selects each table individually in the document and then removes indent
+
     Application.ScreenUpdating = False
     
     Dim oTable As Table
     For Each oTable In ActiveDocument.Tables
+        
         oTable.Select
+        
+        ' removes indent
+        'Selection.Paragraphs.Alignment = wdAlignParagraphLeft
         Selection.Paragraphs.LeftIndent = 0
+        
+        ' bolds header
+        Selection.Rows.Item(1).Select
+        Selection.BoldRun
+        
+        ' indents table title
+        'If Selection.Previous(Unit:=wdLine, Count:=1) = WdListType.wdListNoNumbering Then
+           ' Selection.Previous(Unit:=wdParagraph, Count:=1).Select 'wdParagraph and wdLine work
+            'Selection.ParagraphFormat.LeftIndent = CentimetersToPoints(4.01)
+        'End If
     Next
     
     Application.ScreenUpdating = True
 End Sub
-
+'**************************************************************************
+' Iterates through each bulleted/numbered list and fixes its formatting. Currently used to reformat both bulleted and numbered lists
+'**************************************************************************
 Sub reformatBulletedLists()
-' should only be called ONCE
-'Iterates through each bulleted list and outdents it
-' comment more + give source
-
-    'Application.ScreenUpdating = False
-    
-    Dim oPara As Word.Paragraph
-    For Each oPara In ActiveDocument.Paragraphs
-       If oPara.Range.ListFormat.ListType = WdListType.wdListBullet Or oPara.Range.ListFormat.ListType = WdListType.wdListPictureBullet Then
-        oPara.Outdent
-        'oPara.Range.ListFormat.ListOutdent
-        ' outdents yet turns everything to level 1
-       End If
-    Next
-    
-    'Application.ScreenUpdating = True
-
-End Sub
-
-Sub reformatNumberedLists()
-'Iterates through each numbered list and outdents it
-' comment more + give source
-' should only be called once
 
     Application.ScreenUpdating = False
     
-    Dim oPara As Word.Paragraph
-    For Each oPara In ActiveDocument.Paragraphs
-       If oPara.Range.ListFormat.ListType = _
-             WdListType.wdListSimpleNumbering Then 'TODO: investigate difference between wdListSimpleNumbering, wdListMixedNumbering, etc.
-             oPara.Outdent
-       End If
-    Next
+    Dim LP As ListParagraphs
+    Dim p As Paragraph
+    Dim i As ListLevel
+    Set LP = ActiveDocument.ListParagraphs
+    For Each p In LP
+    For Each i In p.Range.ListFormat.ListTemplate.ListLevels
+
+    If i.Index = 1 And Not i.Index = 2 Then
+    i.TrailingCharacter = wdTrailingTab
+    i.NumberPosition = CentimetersToPoints(4) ' indent from left margin
+    i.TextPosition = CentimetersToPoints(4.8) ' position from left margin of text
+    i.TabPosition = CentimetersToPoints(4.8) ' position of tab stop
+    
+    ElseIf i.Index = 2 And Not i.Index = 1 Then
+    i.TrailingCharacter = wdTrailingTab
+    i.NumberPosition = CentimetersToPoints(4.8) ' indent from left margin
+    i.TextPosition = CentimetersToPoints(5.6) ' position from left margin of text
+    i.TabPosition = CentimetersToPoints(5.6) ' position of tab stop
+    
+    End If
+Next i
+Next p
     
     Application.ScreenUpdating = True
 
 End Sub
+'**************************************************************************
+' DEPRECATED since reformatBulletedLists does this and is more reliable. Iterates through each numbered list and outdents it.
+'**************************************************************************
+Sub reformatNumberedLists()
+
+    Dim oPara As Word.Paragraph
+    For Each oPara In ActiveDocument.Paragraphs
+       If oPara.Range.ListFormat.ListType = WdListType.wdListSimpleNumbering Then
+        oPara.Outdent
+        'oPara.Range.ListFormat.ApplyListTemplateWithLevel
+       End If
+    Next
+
+End Sub
+'**************************************************************************
+' DOESN'T WORK
+'**************************************************************************
 Sub reformatFigTitles()
     Selection.HomeKey Unit:=wdStory
     For Each oShape In ActiveDocument.Shapes
@@ -70,7 +99,9 @@ Sub reformatFigTitles()
         End If
     Next
 End Sub
-
+'**************************************************************************
+' DOESN'T WORK
+'**************************************************************************
 Sub restyleBulletedLists()
 'Iterates through each bulleted list and styles it
 ' comment more + give source
@@ -82,26 +113,84 @@ Sub restyleBulletedLists()
        If oPara.Range.ListFormat.ListType = _
              WdListType.wdListBullet Then
              'oPara.Style = "BulletStyle" 'Applies custom style. caveat: won't work on level 2 bullets. another caveat: need to save the style
-             ' this is a very important concept that shoudld be applied to figure reformatting.
              Application.Run "TemplateProject.Styles.kbdListBullet" ' problem: runs only once
-             ' interesting thing: can access macros that i can't edit
        End If
     Next
     
     Application.ScreenUpdating = True
 
 End Sub
-
+'**************************************************************************
+' DOESN'T WORK
+'**************************************************************************
 Sub restyleEverything()
     'Application.Run "TemplateProject.Styles"
     Call kdbListBullet
 End Sub
-
+'**************************************************************************
+' Goes over every image in the document. Ignores small icons. Ensures body graphics (and figure titles) are indented. Ensures full page graphics have full width.
+'**************************************************************************
 Sub reformatImages()
+    Application.ScreenUpdating = False
+    
+    Const BODY_INDENT As Double = 113.6693 ' 4.01 cm
+    Const MAX_FULL_WIDTH As Double = 507.4016 ' 17.90 cm 'unused
+    Const MAX_BODY_WIDTH As Double = MAX_FULL_WIDTH - BODY_INDENT '476.2205 = 16.80 cm
+    Const MIN_WIDTH As Double = 80 'arbitrary value used to exclude extremely small images (unlikely to be body graphics)
+    
+    Selection.HomeKey Unit:=wdStory
+    
+    For Each oShape In ActiveDocument.InlineShapes
+    
+    If oShape.Width < MIN_WIDTH Then ' skip current shape if it is too small
+        GoTo ExitLine
+    End If
+    
+    Set convertedShape = oShape.ConvertToShape ' convert shape to a floating shape
+    
+    'set the formatting of the floating shape to Top and Bottom
+    With convertedShape.WrapFormat
+    .Type = wdWrapTopBottom
+    .AllowOverlap = False
+    End With
+    
+    With convertedShape
+    .LockAnchor = True ' seems to have no effect
+    .LockAspectRatio = True
+    End With
+    
+    'If the graphic is a body grpahic, indent it and the figure title above it
+    If convertedShape.Width < MAX_BODY_WIDTH Then
+        convertedShape.Left = BODY_INDENT
+        convertedShape.Select
+        Selection.Previous(Unit:=wdParagraph, Count:=1).Select 'wdParagraph and wdLine work
+        Selection.ParagraphFormat.LeftIndent = BODY_INDENT
+        
+    'If the graphic is a full body graphic, scale it down, indent it and the figure title above it
+    ElseIf convertedShape.Width > MAX_BODY_WIDTH Then
+        convertedShape.Width = MAX_BODY_WIDTH
+        convertedShape.Left = BODY_INDENT
+        convertedShape.Select
+        Selection.Previous(Unit:=wdParagraph, Count:=1).Select 'wdParagraph and wdLine work
+        Selection.ParagraphFormat.LeftIndent = BODY_INDENT
+    
+    End If
+ExitLine:
+    Next oShape
+    
+    Application.ScreenUpdating = True
+
+End Sub
+'**************************************************************************
+' DOESN'T WORK. WORKS FOR OASD COPY only.
+'**************************************************************************
+Sub OLDreformatImages()
     Application.ScreenUpdating = False
     
     Const MAX_BODY_WIDTH As Double = 391.46457
     Const MAX_FULL_WIDTH As Double = 507.4016
+    
+   
     
     Selection.HomeKey Unit:=wdStory
     
@@ -112,13 +201,11 @@ Sub reformatImages()
     'set the formatting of the floating shape to Top and Bottom
     With convertedShape.WrapFormat
     .Type = wdWrapTopBottom
-    .AllowOverlap = False
-    .DistanceTop = 0 ' don't this and DistanceBottom are necessary
-    .DistanceBottom = 0
+    .AllowOverlap = True ' False would result in images bunching up together
     End With
     
     With convertedShape
-    .LockAnchor = True
+    .LockAnchor = True ' seems to have no effect
     .LockAspectRatio = True
     End With
     
@@ -143,6 +230,9 @@ Sub reformatImages()
     Application.ScreenUpdating = True
 
 End Sub
+'**************************************************************************
+' Removes extra wording from figure titles (like Figure 1: Figure1Apple to Figure 1: Apple) Currently useless as there is no redundant wording.
+'**************************************************************************
 Sub removeFigWording()
 
 Set myRange = ActiveDocument.Range(Start:=0, End:=0)
@@ -163,34 +253,31 @@ For i = 200 To 1 Step -1
 Next i
 
 End Sub
-
+'**************************************************************************
+' Used to test code which could possible be implemented in other Sub procedures
+'**************************************************************************
 Sub experimenter()
 
-Application.ScreenUpdating = False
-    Selection.HomeKey Unit:=wdStory
-    Dim oStr As String
-    Dim oFig As InlineShape
-    
-    ' Make new style
-    AddNewStyle "FigT"
-     
-    ' Loop through all available inline shapes
-    For Each oFig In ActiveDocument.InlineShapes
-        On Error GoTo FigErr:
-        oFig.Select
-        On Error GoTo FigErr:
-        Selection.Previous(Unit:=wdLine, Count:=1).Select
-        On Error GoTo FigErr:
-        oStr = Selection.Range.Text
-        If oStr Like "*Figure*" Then
-            Selection.Range.FormattedText
-            Selection.Range.Font.Position
-            
-            Selection.Range.Style = "FigT"
-        End If
-FigContinue:
-    Next oFig
+'**************************************************************************
+' Indents all figure and table titles. May not be neccessary as this is already done in other procedures and we may misdiagnose
+'**************************************************************************
 
-Application.ScreenUpdating = False
+Selection.Find.ClearFormatting
+Selection.Find.Style = ActiveDocument.Styles("Caption")
+With Selection.Find
+    .Text = ""
+    .Replacement.Text = ""
+    .Forward = True
+    .Wrap = wdFindContinue
+    .Format = True
+    .MatchCase = False
+    .MatchWholeWord = False
+    .MatchWildcards = False
+    .MatchSoundsLike = False
+    .MatchAllWordForms = False
+End With
+Selection.Find.Execute
+WordBasic.SelectSimilarFormatting
+Selection.Paragraphs.LeftIndent = CentimetersToPoints(4.01)
+
 End Sub
-
