@@ -5,8 +5,9 @@ Attribute VB_Name = "Reformat"
 Sub reformatEverything()
 
     reformatTables
-    restyleBulletLists
+    'restyleBulletLists
     reformatNumberedLists
+    restyleBulletLists
     reformatImages
     restyleSectionTitles
     addSpaceAfterHeadings
@@ -43,6 +44,8 @@ End Sub
 ' Searches and replaces builtin bullet lists levels 1 and 2 with dematic specific styles
 '**************************************************************************
 'Caveat: need to have BulletList1C and BulletList2C defined in the normal.docx file
+
+'TODO: try reapplying styles. DONE: works
 Sub restyleBulletLists()
 
     Application.ScreenUpdating = False
@@ -56,7 +59,7 @@ Sub restyleBulletLists()
         .Style = "List Bullet 2"
         .Replacement.Text = ""
         .Replacement.ClearFormatting
-        .Replacement.Style = "BulletList2C"
+        .Replacement.Style = "List Bullet 2"
         .Wrap = wdFindContinue
         .Execute Replace:=wdReplaceAll
     End With
@@ -68,7 +71,7 @@ Sub restyleBulletLists()
         .Style = "List Bullet"
         .Replacement.Text = ""
         .Replacement.ClearFormatting
-        .Replacement.Style = "BulletList1C"
+        .Replacement.Style = "List Bullet"
         .Wrap = wdFindContinue
         .Execute Replace:=wdReplaceAll
     End With
@@ -81,14 +84,51 @@ Sub reformatNumberedLists()
 
     Application.ScreenUpdating = False
 
-    Dim oPara As Word.Paragraph
-    For Each oPara In ActiveDocument.Paragraphs
-       If oPara.Range.ListFormat.ListType = _
-             WdListType.wdListSimpleNumbering Then
-             oPara.Outdent
-       End If
-    Next
+'    'ISSUE with reapplying styles: doens't reset numbering
+'    With Selection.Find
+'        .Text = ""
+'        .ClearFormatting
+'        .Style = "List Number"
+'        .Replacement.Text = ""
+'        .Replacement.ClearFormatting
+'        .Replacement.Style = "List Number"
+'        .Wrap = wdFindContinue
+'        .Execute Replace:=wdReplaceAll
+'    End With
 
+'    Dim oPara As Word.Paragraph
+'    For Each oPara In ActiveDocument.Paragraphs
+'       If oPara.Range.ListFormat.ListType = _
+'             WdListType.wdListSimpleNumbering Then
+'             'oPara.Style = "List Number"
+'             'Application.Run MacroName:="TemplateProject.Styles.FormatNumberDefault"
+'             'oPara.SelectNumber
+'             'Selection.Style = "List Number"
+'             'oPara.Style = "List Number"
+'       End If
+'    Next
+
+
+    Dim LP As ListParagraphs
+    Dim p As Paragraph
+    Dim i As ListLevel
+    Set LP = ActiveDocument.ListParagraphs
+    For Each p In LP
+        For Each i In p.Range.ListFormat.ListTemplate.ListLevels
+            If i.Index = 1 And Not i.Index = 2 Then
+                i.TrailingCharacter = wdTrailingTab
+                i.NumberPosition = CentimetersToPoints(4) ' indent from left margin
+                i.TextPosition = CentimetersToPoints(4.8) ' position from left margin of text
+                i.TabPosition = CentimetersToPoints(4.8) ' position of tab stop
+            ElseIf i.Index = 2 And Not i.Index = 1 Then
+                i.TrailingCharacter = wdTrailingTab
+                i.NumberPosition = CentimetersToPoints(4.8)
+                i.TextPosition = CentimetersToPoints(5.6)
+                i.TabPosition = CentimetersToPoints(5.6)
+            End If
+        Next i
+    Next p
+    
     Application.ScreenUpdating = True
 
 End Sub
@@ -245,6 +285,13 @@ End Sub
 '**************************************************************************
 Sub experimenter()
     Application.ScreenUpdating = False
+    
+     Dim oImage As Paragraph
+    For Each oImage In ActiveDocument.Paragraphs
+        If oImage.Style = "Normal" Then
+            oImage.Style = "Normal"
+        End If
+    Next oImage
     
     
 
