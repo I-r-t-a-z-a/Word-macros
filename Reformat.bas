@@ -5,9 +5,12 @@ Attribute VB_Name = "Reformat"
 Sub reformatEverything()
 
     reformatTables
+    restyleBulletLists
+    reformatNumberedLists
     reformatImages
-    reformatLists
     restyleSectionTitles
+    addSpaceAfterHeadings
+    addSpaceAfterImages
     
 End Sub
 '**************************************************************************
@@ -35,8 +38,63 @@ Sub reformatTables()
     
     Application.ScreenUpdating = True
 End Sub
+
 '**************************************************************************
-' Iterates through each bulleted/numbered list and fixes its formatting. Currently used to reformat both bulleted and numbered lists
+' Searches and replaces builtin bullet lists levels 1 and 2 with dematic specific styles
+'**************************************************************************
+'Caveat: need to have BulletList1C and BulletList2C defined in the normal.docx file
+Sub restyleBulletLists()
+
+    Application.ScreenUpdating = False
+    
+    Dim search_style As String ' the style which apparently seem out of style
+    Dim replace_style As String ' the desired style
+    
+    With Selection.Find
+        .Text = ""
+        .ClearFormatting
+        .Style = "List Bullet 2"
+        .Replacement.Text = ""
+        .Replacement.ClearFormatting
+        .Replacement.Style = "BulletList2C"
+        .Wrap = wdFindContinue
+        .Execute Replace:=wdReplaceAll
+    End With
+    
+    
+    With Selection.Find
+        .Text = ""
+        .ClearFormatting
+        .Style = "List Bullet"
+        .Replacement.Text = ""
+        .Replacement.ClearFormatting
+        .Replacement.Style = "BulletList1C"
+        .Wrap = wdFindContinue
+        .Execute Replace:=wdReplaceAll
+    End With
+
+    Application.ScreenUpdating = True
+
+End Sub
+
+Sub reformatNumberedLists()
+
+    Application.ScreenUpdating = False
+
+    Dim oPara As Word.Paragraph
+    For Each oPara In ActiveDocument.Paragraphs
+       If oPara.Range.ListFormat.ListType = _
+             WdListType.wdListSimpleNumbering Then
+             oPara.Outdent
+       End If
+    Next
+
+    Application.ScreenUpdating = True
+
+End Sub
+
+'**************************************************************************
+' DEPRECATED
 '**************************************************************************
 Sub reformatLists()
 
@@ -111,6 +169,11 @@ Sub reformatImages()
         'Selection.ParagraphFormat.SpaceAfter = 6 'doesn't work
         Selection.EndOf
         
+'        For Each convertedShape In ActiveDocument.Shapes
+'            convertedShape.Select
+'            Selection.ShapeRange.ConvertToInlineShape
+'        Next convertedShape
+        
         'TODO spaces text below image
 '        convertedShape.Select
 '        Selection.Next(Unit:=wdLine, Count:=1).Select 'wdParagraph and wdLine work
@@ -144,30 +207,46 @@ Application.ScreenUpdating = True
 End Sub
 
 '**************************************************************************
+'
+'**************************************************************************
+Sub addSpaceAfterHeadings()
+    Application.ScreenUpdating = False
+    
+    ' loop over all headings. if they don't have 12pts after, make it so
+    Dim oHeading As Paragraph
+    For Each oHeading In ActiveDocument.Paragraphs
+        If (oHeading.Style = "Heading 1" Or oHeading.Style = "Heading 2" Or oHeading.Style = "Heading 3" Or oHeading.Style = "Heading 4" _
+        Or oHeading.Style = "Heading 5" Or oHeading.Style = "Heading 6") And oHeading.SpaceAfter <> 12 Then
+            oHeading.SpaceAfter = 12
+        End If
+    Next oHeading
+
+    Application.ScreenUpdating = True
+End Sub
+
+'**************************************************************************
+'
+'**************************************************************************
+Sub addSpaceAfterImages()
+    Application.ScreenUpdating = False
+    
+    Dim oImage As Paragraph
+    For Each oImage In ActiveDocument.Paragraphs
+        If oImage.Style = "Normal" And oImage.SpaceAfter <> 6 Then
+            oImage.SpaceAfter = 6
+        End If
+    Next oImage
+
+    Application.ScreenUpdating = True
+End Sub
+
+'**************************************************************************
 ' Used to change and test code from other procedures
 '**************************************************************************
 Sub experimenter()
     Application.ScreenUpdating = False
     
-    Dim LP As ListParagraphs
-    Dim oPara As Paragraph
-    Dim i As ListLevel
-    Set LP = ActiveDocument.ListParagraphs
-    For Each oPara In LP
-        For Each i In oPara.Range.ListFormat.ListTemplate.ListLevels
-            If i.Index = 1 And Not i.Index = 2 Then
-                i.TrailingCharacter = wdTrailingTab
-                i.NumberPosition = CentimetersToPoints(4) ' indent from left margin
-                i.TextPosition = CentimetersToPoints(4.8) ' position from left margin of text
-                i.TabPosition = CentimetersToPoints(4.8) ' position of tab stop
-            ElseIf i.Index = 2 And Not i.Index = 1 Then
-                i.TrailingCharacter = wdTrailingTab
-                i.NumberPosition = CentimetersToPoints(4.8)
-                i.TextPosition = CentimetersToPoints(5.6)
-                i.TabPosition = CentimetersToPoints(5.6)
-            End If
-        Next i
-    Next oPara
+    
 
     Application.ScreenUpdating = True
 End Sub
