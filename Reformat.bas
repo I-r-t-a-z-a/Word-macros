@@ -5,7 +5,6 @@ Attribute VB_Name = "Reformat"
 Sub reformatEverything()
 
     reformatTables
-    'restyleBulletLists
     reformatNumberedLists
     restyleBulletLists
     reformatImages
@@ -21,6 +20,9 @@ Sub reformatTables()
 
     Application.ScreenUpdating = False
     
+    Dim unboldedTables As Integer
+    unboldedTables = 0
+    
     Dim oTable As Table
     For Each oTable In ActiveDocument.Tables
         oTable.Select
@@ -33,19 +35,31 @@ Sub reformatTables()
         
         oTable.Select
         Selection.Paragraphs.LeftIndent = 0
-        Selection.Rows.Item(1).Select
-        Selection.BoldRun
-    Next
+        
+        On Error GoTo ExceptionHandler:
+            Selection.Rows.Item(1).Select
+            Selection.BoldRun
+            
+    GoTo NextTable
     
+ExceptionHandler:
+    unboldedTables = unboldedTables + 1
+    Resume NextTable
+    
+'Looks useless, but Next oTable cannot be put in the ExceptionHandler label
+NextTable:
+    Next oTable
+
+    If unboldedTables > 0 Then
+        MsgBox (unboldedTables & " table header(s) have not been bolded.")
+    End If
+
     Application.ScreenUpdating = True
 End Sub
 
 '**************************************************************************
-' Searches and replaces builtin bullet lists levels 1 and 2 with dematic specific styles
+' Reapplies the List Bullet styles
 '**************************************************************************
-'Caveat: need to have BulletList1C and BulletList2C defined in the normal.docx file
-
-'TODO: try reapplying styles. DONE: works
 Sub restyleBulletLists()
 
     Application.ScreenUpdating = False
@@ -84,31 +98,7 @@ Sub reformatNumberedLists()
 
     Application.ScreenUpdating = False
 
-'    'ISSUE with reapplying styles: doens't reset numbering
-'    With Selection.Find
-'        .Text = ""
-'        .ClearFormatting
-'        .Style = "List Number"
-'        .Replacement.Text = ""
-'        .Replacement.ClearFormatting
-'        .Replacement.Style = "List Number"
-'        .Wrap = wdFindContinue
-'        .Execute Replace:=wdReplaceAll
-'    End With
-
-'    Dim oPara As Word.Paragraph
-'    For Each oPara In ActiveDocument.Paragraphs
-'       If oPara.Range.ListFormat.ListType = _
-'             WdListType.wdListSimpleNumbering Then
-'             'oPara.Style = "List Number"
-'             'Application.Run MacroName:="TemplateProject.Styles.FormatNumberDefault"
-'             'oPara.SelectNumber
-'             'Selection.Style = "List Number"
-'             'oPara.Style = "List Number"
-'       End If
-'    Next
-
-
+    ' using this inefficient code because re applying styles doesn't properly reset numbering
     Dim LP As ListParagraphs
     Dim p As Paragraph
     Dim i As ListLevel
@@ -132,38 +122,6 @@ Sub reformatNumberedLists()
     Application.ScreenUpdating = True
 
 End Sub
-
-'**************************************************************************
-' DEPRECATED
-'**************************************************************************
-Sub reformatLists()
-
-    Application.ScreenUpdating = False
-    
-    Dim LP As ListParagraphs
-    Dim p As Paragraph
-    Dim i As ListLevel
-    Set LP = ActiveDocument.ListParagraphs
-    For Each p In LP
-        For Each i In p.Range.ListFormat.ListTemplate.ListLevels
-            If i.Index = 1 And Not i.Index = 2 Then
-                i.TrailingCharacter = wdTrailingTab
-                i.NumberPosition = CentimetersToPoints(4) ' indent from left margin
-                i.TextPosition = CentimetersToPoints(4.8) ' position from left margin of text
-                i.TabPosition = CentimetersToPoints(4.8) ' position of tab stop
-            ElseIf i.Index = 2 And Not i.Index = 1 Then
-                i.TrailingCharacter = wdTrailingTab
-                i.NumberPosition = CentimetersToPoints(4.8)
-                i.TextPosition = CentimetersToPoints(5.6)
-                i.TabPosition = CentimetersToPoints(5.6)
-            End If
-        Next i
-    Next p
-    
-    Application.ScreenUpdating = True
-
-End Sub
-
 '**************************************************************************
 ' Goes over every image in the document. Ignores small icons. Ensures body graphics (and figure titles) are indented. Ensures full page graphics have full width.
 '**************************************************************************
@@ -173,14 +131,15 @@ Sub reformatImages()
     Const BODY_INDENT As Double = 113.6693 ' 4.01 cm
     Const MAX_FULL_WIDTH As Double = 481.0193 ' 16.969 cm
     Const MAX_BODY_WIDTH As Double = 367.35 'value derived from table width = 12.959 cm 'MAX_FULL_WIDTH - BODY_INDENT
-    Const MIN_WIDTH As Double = 80 'arbitrary value used to exclude extremely small images (unlikely to be body graphics)
+    Const MIN_WIDTH As Double = 100 'arbitrary value used to exclude extremely small images (unlikely to be body graphics)
     
     'Selection.HomeKey Unit:=wdStory ' used only for testing purposes
     
     For Each oShape In ActiveDocument.InlineShapes
     
-        If oShape.Width < MIN_WIDTH Then ' skip current shape if it is too small
-            GoTo ExitLine
+        oShape.Select
+        If oShape.Width < MIN_WIDTH Or Selection.Previous(Unit:=wdParagraph, Count:=1).Style <> "Caption" Then ' skip current shape if it is too small or doesn't have a caption above it
+            GoTo NextShape
         End If
         
         Set convertedShape = oShape.ConvertToShape ' convert shape to a floating shape
@@ -219,8 +178,9 @@ Sub reformatImages()
 '        Selection.Next(Unit:=wdLine, Count:=1).Select 'wdParagraph and wdLine work
 '        Selection.ParagraphFormat.SpaceBeforeAuto = 6
 '        Selection.EndOf
+        GoTo NextShape
         
-ExitLine:
+NextShape:
     Next oShape
     
     Application.ScreenUpdating = True
@@ -247,7 +207,7 @@ Application.ScreenUpdating = True
 End Sub
 
 '**************************************************************************
-'
+' Sets space after all headings to 12 points
 '**************************************************************************
 Sub addSpaceAfterHeadings()
     Application.ScreenUpdating = False
@@ -265,8 +225,9 @@ Sub addSpaceAfterHeadings()
 End Sub
 
 '**************************************************************************
-'
+' Sets space after all images to 6 points
 '**************************************************************************
+'Note: uses normal style to identify images because using inline shapes doesn't work properly
 Sub addSpaceAfterImages()
     Application.ScreenUpdating = False
     
@@ -285,15 +246,6 @@ End Sub
 '**************************************************************************
 Sub experimenter()
     Application.ScreenUpdating = False
-    
-     Dim oImage As Paragraph
-    For Each oImage In ActiveDocument.Paragraphs
-        If oImage.Style = "Normal" Then
-            oImage.Style = "Normal"
-        End If
-    Next oImage
-    
-    
 
     Application.ScreenUpdating = True
 End Sub
